@@ -1,0 +1,5 @@
+pywin32
+xlwings
+pandas
+requests
+python-dotenv
