@@ -3,3 +3,4 @@ xlwings
 pandas
 requests
 python-dotenv
+aiohttp
