@@ -2,14 +2,18 @@ import asyncio
 import json
 import logging
 import re
+import traceback
 import zipfile
 from dataclasses import dataclass
 from io import TextIOWrapper
+from time import sleep
 from typing import Any, List, Optional, Pattern
 
+import pyperclip
 from aiohttp import ClientSession
 
 import datatype
+from datatype import *
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -96,10 +100,10 @@ class PropertyGroup:
         """
         return {
             'name': self.name,
+            'table_name': self.table_name,
             'properties': [
                 {
                     'name': prop.name,
-                    'table_name': self.table_name,
                     'type': prop.type.title,
                     'signatures': [sig.pattern for sig in prop.signatures]
                 }
@@ -107,65 +111,60 @@ class PropertyGroup:
             ]
         }
 
-    def pars(self, html: str) -> "ParseResult":
+    def pars(self, html: str, source: str) -> "ParseResult":
+        _properties = []
+        for prop in self.properties:
+            _properties.append(PropertyResult(name=prop.name, value=prop.match(html), type=prop.type))
+
         return ParseResult(
             name=self.name,
-            properties=[PropertyResult(name=prop.name, value=prop.match(html), type=prop.type)
-                        for prop in self.properties]
+            properties=_properties,
+            table_name=self.table_name,
+            source=source
         )
 
 
-@dataclass
-class PropertyResult:
-    name: str
-    value: Any
-    type: datatype.DataType
+class Watchdog:
+    _logger: logging.Logger
+    _watchdog: Optional[asyncio.Task]
+    _web_parser: "WebPageParser"
 
-    def to_dict(self) -> dict:
-        return {
-            'name': self.name,
-            'value': self.value,
-            'type': self.type.title
-        }
+    def __init__(self, web_parser: "WebPageParser", _logger: Optional[logging.Logger] = logger):
+        self._logger = _logger
+        self._watchdog = None
+        if not isinstance(web_parser, WebPageParser):
+            raise TypeError("web_parser должен быть экземпляром WebPageParser")
+        self._web_parser = web_parser
 
+    async def start(self, background: bool = False):
+        if self._watchdog:
+            self._watchdog.cancel()
 
-@dataclass
-class ParseResult:
-    """Класс для хранения результатов парсинга."""
-    name: str
-    properties: list[PropertyResult]
+        if background:
+            self._watchdog = asyncio.create_task(self._watch(), name="watchdog")
+            self._logger.info("Наблюдение за буфером обмена запущено в фоновом режиме.")
+        else:
+            self._logger.info("Наблюдение за буфером обмена запущено в интерактивном режиме.")
+            await self._watch()
 
-    def to_dict(self) -> dict:
-        """
-        Преобразует результат парсинга в словарь.
-
-        :return: Словарь результатов.
-        """
-        return {
-            'name': self.name,
-            'properties': [
-                prop.to_dict() for prop in self.properties
-            ]
-        }
-
-    @classmethod
-    def empty(cls) -> "ParseResult":
-        return ParseResult(name="empty", properties=[])
-
-    @property
-    def rate(self) -> float:
-        """
-        Вычисляет рейтинг результатов парсинга.
-
-        :return: Рейтинг.
-        """
-        return sum(prop.value is not None for prop in self.properties) / len(self.properties)
+    async def _watch(self):
+        _last_val = pyperclip.paste()
+        while True:
+            await asyncio.sleep(.5)
+            val = pyperclip.paste()
+            if val != _last_val:
+                self._logger.info("Новое значение в буфере обмена: %s", val)
+                _res = await self._web_parser.parse(val)
+                if _res:
+                    self._logger.info("Результат парсинга: %s", _res.to_dict())
+                _last_val = val
 
 
 class WebPageParser:
     """Класс для парсинга веб-страниц с использованием регулярных выражений."""
 
     _session: Optional[ClientSession] = None
+    _watchdog: Optional[Watchdog] = None
     _property_groups: List[PropertyGroup] = []
 
     def __init__(self, _logger: Optional[logging.Logger] = logger) -> None:
@@ -180,6 +179,7 @@ class WebPageParser:
     def _initialize(self) -> None:
         """Выполняет начальную инициализацию парсера."""
         self._property_groups = []
+        self._watchdog = Watchdog(self)
         self.logger.debug("Инициализация парсера завершена.")
 
     @classmethod
@@ -243,14 +243,13 @@ class WebPageParser:
         """
         Сохраняет конфигурацию группы свойств в файл.
 
-        :param group: Экземпляр PropertyGroup.
         :param file_path: Путь к файлу для сохранения.
         :return: Ссылка на текущий экземпляр WebPageParser.
         """
         with zipfile.ZipFile(file_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True, compresslevel=9) as zip_ref:
             for prop in self._property_groups:
                 # Открываем файл внутри архива в режиме записи ('w')
-                with zip_ref.open(prop.table_name, 'w') as file_bin:
+                with zip_ref.open(prop.table_name + '.json', 'w') as file_bin:
                     # Оборачиваем бинарный поток в текстовый для записи JSON
                     with TextIOWrapper(file_bin, encoding='utf-8') as file_text:
                         conf = prop.to_config()
@@ -267,62 +266,51 @@ class WebPageParser:
         :param url: URL веб-страницы для парсинга.
         :return: Объект ParseResult с результатами парсинга.
         """
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;'
+                      'q=0.8,application/signed-exchange;v=b3;q=0.9',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Connection': 'keep-alive',
+            'Host': 'market.yandex.ru',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/'
+                          '83.0.4103.61 Safari/537.36',
+        }
+
         session = await self._get_session()
         try:
-            async with session.get(url) as response:
+            async with session.get(url, headers=headers) as response:
                 self.logger.info("Запрос к %s завершен с статусом %s", url, response.status)
                 if response.status != 200:
                     self.logger.error("Не удалось загрузить страницу: %s", url)
                     return ParseResult.empty()
                 text = await response.text()
-                results = [group.pars(text) for group in self._property_groups]
+                with open('log.html', 'w', encoding='utf-8') as f:
+                    f.write(text.replace(r'"/', '"https://market.yandex.ru/'))
+                results = [group.pars(text, url) for group in self._property_groups]
+
                 return sorted(results, key=lambda x: x.rate, reverse=True)[0]
         except Exception as e:
-            self.logger.error("Ошибка при парсинге страницы %s: %s", url, e)
+            self.logger.error("Ошибка при парсинге страницы %s: %s номер строки %s", url, e, traceback.format_exc())
             return ParseResult.empty()
 
-    # def _extract_properties(self, text: str) -> dict:
-    #     """
-    #     Извлекает свойства из текста страницы.
-    #
-    #     :param text: Текст веб-страницы.
-    #     :return: Словарь с результатами парсинга.
-    #     """
-    #     parsed_data = {}
-    #     for group in self._property_groups:
-    #         self.logger.debug("Парсинг группы свойств: %s", group.name)
-    #         for prop in group.properties:
-    #             if prop.name not in parsed_data:
-    #                 value = prop.match(text)
-    #                 if value is not None:
-    #                     parsed_data[prop.name] = value
-    #     self.logger.info("Парсинг завершен. Найденные данные: %s", parsed_data)
-    #     return parsed_data
+    async def start_watch(self, background: bool = False) -> None:
+        """
+        Запускает наблюдение за буфером обмена и парсинг веб-страниц.
+
+        :param background: Флаг, указывающий, нужно ли запускать наблюдение в фоновом режиме.
+        """
+        await self._watchdog.start(background)
 
 
-# Пример использования
 if __name__ == "__main__":
     async def main():
-        parser = WebPageParser()
-        #бренд_pattern = r'"brand":"([^"]+)"'
-        # сокет_pattern = r'{"value":"([^"]+)","transition":{[^}]+},"type":"catalog"},"name":"Сокет"}]}'
-        # тип_памяти_pattern = r'{"value":"([^"]+)","transition":{"params":{[^}]+},"type":"catalog"},"name":"Тип памяти"}'
-        # количество_ядер_pattern = r'"Ядро процессора"},{"value":"(\d+)\s*шт\."'
-        # количество_потоков_pattern = r'"name":"Количество потоков","value":"(\d+)"'
-        # техпроцесс_pattern = r'"value":"(\d+)\s*нм"'
-        # частота_pattern = r'"value":"(\d+)\s*МГц"'
-        # tdp_pattern = r'"value":"(\d+)\s*Вт"'
-        # Загрузка конфигурации из файла
-        group = PropertyGroup('Процессор', 'cpu', [
-            Property('Производитель', datatype.STRING, [re.compile(r'"brand":"([^"]+)"')]),
-            Property('Сокет', datatype.STRING, [re.compile(r'{"value":"([^"]+)","transition":{[^}]+},"type":"catalog"},"name":"Сокет"}]}')]),
-            Property('Тип памяти', datatype.STRING, [re.compile(r'{"value":"([^"]+)","transition":{"params":{[^}]+},"type":"catalog"},"name":"Тип памяти"}')]),
-        ])
+        parser = WebPageParser.from_configfile('cfg.zip')
+        await parser.start_watch()
 
-        parser.add_property_group(group)
-        parser.to_configfile('cfg.zip')
-
-        # Закрытие сессии
-        await WebPageParser.close_session()
 
     asyncio.run(main())
