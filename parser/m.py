@@ -51,6 +51,7 @@ def extract_specs(html):
     json_content = html
 
     # Извлечение значений с помощью регулярных выражений
+    title_pattern = r'document\.title="Процессор\s+([^—]+)'
     бренд_pattern = r'"brand":"([^"]+)"'
     сокет_pattern = r'{"value":"([^"]+)","transition":{[^}]+},"type":"catalog"},"name":"Сокет"}]}'
     тип_памяти_pattern = r'{"value":"([^"]+)","transition":{"params":{[^}]+},"type":"catalog"},"name":"Тип памяти"}'
