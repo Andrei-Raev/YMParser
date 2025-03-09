@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Any, Callable
 
 
@@ -81,3 +81,23 @@ class DataType:
 
     def __call__(self, x: str) -> Any:
         return self.decode(x)
+
+
+@dataclass
+class PageResult:
+    """
+    Класс для хранения страницы.
+
+    :var url: URL страницы.
+    :var content: Содержимое страницы.
+    """
+    url: str
+    title: str
+    content: str
+
+    def to_dict(self) -> dict:
+        """Преобразует объект в словарь."""
+        return asdict(self)
+
+    def __str__(self) -> str:
+        return f'PageResult(url={self.url}, title={self.title}, content={self.content[:100]}...)'

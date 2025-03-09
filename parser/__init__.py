@@ -2,18 +2,18 @@ import asyncio
 import json
 import logging
 import re
+import threading
 import traceback
 import zipfile
 from dataclasses import dataclass
 from io import TextIOWrapper
-from time import sleep
-from typing import Any, List, Optional, Pattern
+from typing import List, Optional, Pattern
 
 import pyperclip
-from aiohttp import ClientSession
 
 import datatype
 from datatype import *
+from parser.get_page import PageExtractor
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class Property:
     type: datatype.DataType
     signatures: List[Pattern]
 
-    def match(self, text: str) -> Optional[Any]:
+    def match(self, text: str) -> Optional:
         """
         Ищет значение свойства в тексте с использованием сигнатур.
 
@@ -49,7 +49,7 @@ class Property:
         logger.debug("Совпадение для свойства '%s' не найдено.", self.name)
         return None
 
-    def _convert_type(self, value: str) -> Any:
+    def _convert_type(self, value: str):
         """
         Преобразует строковое значение в указанный тип.
 
@@ -154,16 +154,20 @@ class Watchdog:
             val = pyperclip.paste()
             if val != _last_val:
                 self._logger.info("Новое значение в буфере обмена: %s", val)
-                _res = await self._web_parser.parse(val)
-                if _res:
-                    self._logger.info("Результат парсинга: %s", _res.to_dict())
+                threading.Thread(target=self._parse, args=(asyncio.get_event_loop(), val)).start()
                 _last_val = val
+
+    def _parse(self, loop: asyncio.AbstractEventLoop, url: str) -> None:
+        _res = asyncio.run(self._web_parser.parse(url))  # self._web_parser.parse(url)
+        _res = asyncio.run(self._web_parser.parse(url))  # self._web_parser.parse(url)
+        if _res:
+            self._logger.info("Результат парсинга: %s", _res.to_dict())
 
 
 class WebPageParser:
     """Класс для парсинга веб-страниц с использованием регулярных выражений."""
 
-    _session: Optional[ClientSession] = None
+    # _session: Optional[ClientSession] = None
     _watchdog: Optional[Watchdog] = None
     _property_groups: List[PropertyGroup] = []
 
@@ -182,25 +186,25 @@ class WebPageParser:
         self._watchdog = Watchdog(self)
         self.logger.debug("Инициализация парсера завершена.")
 
-    @classmethod
-    async def _get_session(cls) -> ClientSession:
-        """
-        Получает или создает асинхронную сессию для HTTP-запросов.
+    # @classmethod
+    # async def _get_session(cls) -> ClientSession:
+    #     """
+    #     Получает или создает асинхронную сессию для HTTP-запросов.
+    #
+    #     :return: Экземпляр ClientSession.
+    #     """
+    #     if cls._session is None:
+    #         cls._session = ClientSession()
+    #         logger.debug("Создана новая HTTP-сессия.")
+    #     return cls._session
 
-        :return: Экземпляр ClientSession.
-        """
-        if cls._session is None:
-            cls._session = ClientSession()
-            logger.debug("Создана новая HTTP-сессия.")
-        return cls._session
-
-    @classmethod
-    async def close_session(cls) -> None:
-        """Закрывает асинхронную сессию."""
-        if cls._session:
-            await cls._session.close()
-            cls._session = None
-            logger.debug("HTTP-сессия закрыта.")
+    # @classmethod
+    # async def close_session(cls) -> None:
+    #     """Закрывает асинхронную сессию."""
+    #     if cls._session:
+    #         await cls._session.close()
+    #         cls._session = None
+    #         logger.debug("HTTP-сессия закрыта.")
 
     def add_property_group(self, group: PropertyGroup) -> 'WebPageParser':
         """
@@ -266,34 +270,36 @@ class WebPageParser:
         :param url: URL веб-страницы для парсинга.
         :return: Объект ParseResult с результатами парсинга.
         """
-        headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;'
-                      'q=0.8,application/signed-exchange;v=b3;q=0.9',
-            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Connection': 'keep-alive',
-            'Host': 'market.yandex.ru',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Upgrade-Insecure-Requests': '1',
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/'
-                          '83.0.4103.61 Safari/537.36',
-        }
-
-        session = await self._get_session()
+        # headers = {
+        #     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;'
+        #               'q=0.8,application/signed-exchange;v=b3;q=0.9',
+        #     'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        #     'Connection': 'keep-alive',
+        #     'Host': 'market.yandex.ru',
+        #     'Sec-Fetch-Dest': 'document',
+        #     'Sec-Fetch-Mode': 'navigate',
+        #     'Sec-Fetch-Site': 'none',
+        #     'Sec-Fetch-User': '?1',
+        #     'Upgrade-Insecure-Requests': '1',
+        #     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/'
+        #                   '83.0.4103.61 Safari/537.36',
+        # }
+        #
+        # session = await self._get_session()
         try:
-            async with session.get(url, headers=headers) as response:
-                self.logger.info("Запрос к %s завершен с статусом %s", url, response.status)
-                if response.status != 200:
-                    self.logger.error("Не удалось загрузить страницу: %s", url)
-                    return ParseResult.empty()
-                text = await response.text()
-                with open('log.html', 'w', encoding='utf-8') as f:
-                    f.write(text.replace(r'"/', '"https://market.yandex.ru/'))
-                results = [group.pars(text, url) for group in self._property_groups]
+            # async with session.get(url, headers=headers) as response:
+            #     self.logger.info("Запрос к %s завершен с статусом %s", url, response.status)
+            #     if response.status != 200:
+            #         self.logger.error("Не удалось загрузить страницу: %s", url)
+            #         return ParseResult.empty()
+            #     text = await response.text()
+            #     with open('log.html', 'w', encoding='utf-8') as f:
+            #         f.write(text.replace(r'"/', '"https://market.yandex.ru/'))
+            data = await PageExtractor.get(url)
 
-                return sorted(results, key=lambda x: x.rate, reverse=True)[0]
+            results = [group.pars(data.content, url) for group in self._property_groups]
+
+            return sorted(results, key=lambda x: x.rate, reverse=True)[0]
         except Exception as e:
             self.logger.error("Ошибка при парсинге страницы %s: %s номер строки %s", url, e, traceback.format_exc())
             return ParseResult.empty()
