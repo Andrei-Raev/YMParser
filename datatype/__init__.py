@@ -8,6 +8,7 @@ def _EMPYT_ENCODER(x: Any) -> Any:
 
 
 INTEGER = DataType('integer', int, _EMPYT_ENCODER)
+NUMBER = DataType('number', int, _EMPYT_ENCODER)
 FLOAT = DataType('float', float, _EMPYT_ENCODER)
 STRING = DataType('string', str, _EMPYT_ENCODER)
 BOOLEAN = DataType('boolean', bool, _EMPYT_ENCODER)

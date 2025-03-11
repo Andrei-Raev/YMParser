@@ -13,6 +13,7 @@ import pyperclip
 
 import datatype
 from datatype import *
+from parser._utils import clean_url
 from parser.get_page import PageExtractor
 
 # Настройка логирования
@@ -56,9 +57,15 @@ class Property:
         :param value: Строковое значение.
         :return: Значение нужного типа.
         """
+        if self.type is None:
+            return value
+
+        if value is None:
+            return None
+
         try:
             return self.type(value)
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             logger.error("Ошибка преобразования значения '%s' к типу '%s': %s", value, self.type, e)
             return None
 
@@ -158,10 +165,10 @@ class Watchdog:
                 _last_val = val
 
     def _parse(self, loop: asyncio.AbstractEventLoop, url: str) -> None:
-        _res = asyncio.run(self._web_parser.parse(url))  # self._web_parser.parse(url)
-        _res = asyncio.run(self._web_parser.parse(url))  # self._web_parser.parse(url)
+        _res = asyncio.run_coroutine_threadsafe(self._web_parser.parse(url), loop=loop)  # self._web_parser.parse(url)
+        # _res = asyncio.run(self._web_parser.parse(url))  # self._web_parser.parse(url)
         if _res:
-            self._logger.info("Результат парсинга: %s", _res.to_dict())
+            self._logger.info("Результат парсинга: %s", _res.result().to_dict())
 
 
 class WebPageParser:
@@ -297,7 +304,7 @@ class WebPageParser:
             #         f.write(text.replace(r'"/', '"https://market.yandex.ru/'))
             data = await PageExtractor.get(url)
 
-            results = [group.pars(data.content, url) for group in self._property_groups]
+            results = [group.pars(data.content, clean_url(url)) for group in self._property_groups]
 
             return sorted(results, key=lambda x: x.rate, reverse=True)[0]
         except Exception as e:

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from threading import Thread
 from typing import List, Optional
 
 from playwright.async_api import async_playwright, Browser, Page, BrowserContext
@@ -28,7 +29,6 @@ class PageExtractor:
     # window: Optional[gw.BaseWindow]
     logger: Optional[logging.Logger]
 
-
     def __init__(
             self,
             _logger: Optional[logging.Logger] = None
@@ -46,8 +46,10 @@ class PageExtractor:
         self.browser = await self.driver.chromium.launch(headless=False)
         self.context = await self.browser.new_context()
 
+        # Thread(target=lambda x: asyncio.run(ww(x)), args=(self.context,)).start()
+
         await self.context.new_page()
-        gw.getActiveWindow().minimize()
+        # gw.getActiveWindow().minimize()
         self.logger.debug("WebDriver инициализирован.")
 
     @classmethod
@@ -74,7 +76,9 @@ class PageExtractor:
         instance: PageExtractor = cls._instance
         page: Page = await instance.context.new_page()
 
-        gw.getActiveWindow().minimize()
+        instance.logger.debug(f"Запрашивается веб-страница: {url}")
+
+        # gw.getActiveWindow().minimize()
 
         await page.goto(url)
         await page.wait_for_load_state()
@@ -99,6 +103,7 @@ class PageExtractor:
         Закрывает WebDriver.
         """
         instance: PageExtractor = cls._instance
+        await instance.context.close()
         await instance.browser.close()
         await instance.driver.stop()
         instance.logger.debug("WebDriver закрыт.")
