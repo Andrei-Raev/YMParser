@@ -1,3 +1,8 @@
 /.venv
 /.idea
-/parser/get_page/drivers/chrome-win64
+/UI/UI.pyproject*
+!/UI/UI.pyproject.user
+/UI/interface/*
+!/UI/interface/*.ui
+/UI/cache/*
+!/UI/cache/.gitignore

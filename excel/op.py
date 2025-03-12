@@ -78,7 +78,6 @@ def insert_row_into_table(workbook_path: str, sheet_name: str, table_name: str, 
 
 
 import pythoncom
-import win32com.client as win32
 from excel import logger  # Предполагается, что модуль logger настроен
 import os
 
@@ -116,7 +115,11 @@ def create_dynamic_table(workbook_path: str, sheet_name: str, table_name: str, s
         logger.info(f'Лист выбран: {sheet_name}')
 
         # Определяем диапазон для заголовков
-        start_range = sht.Range(start_cell)
+        # start_range = sht.Range(start_cell)
+        start_range = excel.Selection.Cells(1, 1).Address
+        excel.Worksheets('Лист1').Activate()
+        print(start_range)
+        return
         end_cell = sht.Cells(start_range.Row, start_range.Column + len(headers) - 1)
         header_range = sht.Range(start_range, end_cell)
         header_range.Value = [headers]
