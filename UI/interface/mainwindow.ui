@@ -38,9 +38,9 @@
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout"/>
       </widget>
-      <widget class="QWidget" name="ExcelConnectUI">
+      <widget class="QWidget" name="output_area">
        <attribute name="title">
-        <string>Excel</string>
+        <string>Вывод</string>
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout_2"/>
       </widget>

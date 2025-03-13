@@ -1,6 +1,6 @@
 /.venv
 /.idea
-/UI/UI.pyproject*
+/UI/UI.pyproject.*
 !/UI/UI.pyproject.user
 /UI/interface/*
 !/UI/interface/*.ui

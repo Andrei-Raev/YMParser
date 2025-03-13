@@ -1,0 +1,9 @@
+{
+    "files": [
+        "mainwindow.py",
+        "interface/mainwindow.ui",
+        "interface/configInfo.ui",
+        "interface/config.ui",
+        "interface/configAbout.ui"
+    ]
+}
