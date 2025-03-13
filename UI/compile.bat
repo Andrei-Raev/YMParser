@@ -23,7 +23,7 @@ for %%f in (*.ui) do (
 )
 
 REM ?? Завершение процесса с учётом флага nopause
-if /i "%1"=="nopause" (
+if /i "%1"=="nopause" or /i "%2"=="nopause" (
     REM ? Если указан флаг nopause, завершить без паузы
     goto :EOF
 ) else (
@@ -31,3 +31,5 @@ if /i "%1"=="nopause" (
     echo Конвертация завершена. Файлы сохранены в директории "%OUT_DIR%".
     pause
 )
+
+exit
