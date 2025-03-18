@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QFileDialog, QMessageBox
 
 from UI._utils import StatusbarVariants
-from UI.cache.configInfo import Ui_configInfo
+from cache.configInfo import Ui_configInfo
 from cache.config import Ui_Config
 from cache.configAbout import Ui_configAbout
 from datatype import ParserConfig, PropertyGroup

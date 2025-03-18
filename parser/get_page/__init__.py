@@ -1,12 +1,10 @@
 import asyncio
 import logging
-from threading import Thread
 from typing import List, Optional
 
 from playwright.async_api import async_playwright, Browser, Page, BrowserContext
 
 from datatype._classes import PageResult
-import pygetwindow as gw
 
 
 class PageExtractor:
