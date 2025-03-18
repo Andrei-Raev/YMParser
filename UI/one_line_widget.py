@@ -14,13 +14,12 @@ class OneLineWidget(QWidget):
 
         self.ui.label.setText(title)
         if value is not None:
-            value.setParent(self.ui.valueLayout.parent())
+            value.setParent(self.ui.valueLayout)
             self.ui.valueLayout.layout().addWidget(value)
-            print(self.ui.valueLayout.widget().findChildren(QWidget))
 
     @property
     def widgets(self) -> list[QWidget]:
-        return self.ui.valueLayout.layout().findChildren(QWidget)
+        return self.ui.valueLayout.findChildren(QWidget)
 
     @property
     def widget(self) -> QWidget:
@@ -38,9 +37,10 @@ class OneLineWidget(QWidget):
         _all_widgets = self.ui.valueLayout.findChildren(QWidget)
         print(_all_widgets)
         for widget in _all_widgets:
-            self.ui.valueLayout.removeWidget(widget)
-        value.setParent(self.ui.valueLayout.widget())
-        self.ui.valueLayout.addWidget(value)
+            widget.setParent(None)
+            del widget
+        value.setParent(self.ui.valueLayout)
+        self.ui.valueLayout.layout().addWidget(value)
 
     @property
     def title(self) -> str:
